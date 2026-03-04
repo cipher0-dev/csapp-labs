@@ -426,7 +426,61 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatScale2(unsigned uf) { return 2; }
+
+// 111 -> inf/nan
+// 110 -> e = 3
+// 101 -> e = 2
+// 100 -> e = 1
+// 011 -> e = 0
+// 010 -> e = -1
+// 001 -> e = -2
+// 000 -> e = -2
+
+unsigned floatScale2(unsigned uf) {
+  // 1 8 23
+  // printf("uf: %.8x\n", uf);
+
+  const unsigned sign_mask = 0x80000000u;
+  const unsigned exp_mask = 0x7f800000u;
+  const unsigned frac_mask = 0x007fffffu;
+
+  unsigned sign_bits = uf & sign_mask;
+  unsigned exp_bits = uf & exp_mask;
+  unsigned frac_bits = uf & frac_mask;
+
+  // printf("sign_bits: %.8x\n", sign_bits);
+  // printf("exp_bits: %.8x\n", exp_bits);
+  // printf("frac_bits: %.8x\n", frac_bits);
+
+  unsigned updated_frac_bits = frac_bits;
+  unsigned shifted_frac_bits = frac_bits << 1;
+  unsigned updated_exp_bits = exp_bits;
+
+  unsigned char exp_biased_value = exp_bits >> 23;
+
+  if (exp_biased_value == 0xff) {
+    return uf; // value is +/-inf or NaN, return as is
+  }
+
+  if (exp_biased_value == 0) {
+    if (frac_bits == 0) {
+      return uf; // value is +/-zero, return as is
+    }
+    // value is denormal
+    updated_frac_bits = shifted_frac_bits & frac_mask;
+    if (shifted_frac_bits != updated_frac_bits) {
+      updated_exp_bits = (exp_biased_value + 1) << 23;
+    }
+  } else {
+    // value is normal
+    updated_exp_bits = (exp_biased_value + 1) << 23;
+  }
+
+  // printf("updated_exp_bits: %.8x\n", updated_exp_bits);
+  // printf("updated_frac_bits: %.8x\n", updated_frac_bits);
+
+  return sign_bits | updated_exp_bits | updated_frac_bits;
+}
 /*
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
  *   for floating point argument f.
@@ -439,7 +493,72 @@ unsigned floatScale2(unsigned uf) { return 2; }
  *   Max ops: 30
  *   Rating: 4
  */
-int floatFloat2Int(unsigned uf) { return 2; }
+// 111 -> inf/nan
+// 110 -> e = 3
+// 101 -> e = 2
+// 100 -> e = 1
+// 011 -> e = 0
+// 010 -> e = -1
+// 001 -> e = -2
+// 000 -> e = -2
+int floatFloat2Int(unsigned uf) {
+  // printf("uf: %.8x\n", uf);
+
+  const unsigned sign_mask = 0x80000000u;
+  const unsigned exp_mask = 0x7f800000u;
+  const unsigned frac_mask = 0x007fffffu;
+
+  unsigned sign_bits = uf & sign_mask;
+  unsigned exp_bits = uf & exp_mask;
+  unsigned frac_bits = uf & frac_mask;
+
+  // printf("sign_bits: %.8x\n", sign_bits);
+  // printf("exp_bits: %.8x\n", exp_bits);
+  // printf("frac_bits: %.8x\n", frac_bits);
+
+  // TODO: make sure all the signed/unsigned conversions here work out correctly
+  unsigned char exp_biased_value = exp_bits >> 23;
+  const signed char bias = 127;
+  signed char exp_unbiased_value = exp_biased_value - bias;
+
+  // printf("exp_biased_value: %.2x\n", exp_biased_value);
+  // printf("exp_unbiased_value: %d\n", exp_unbiased_value);
+
+  unsigned norm_frac_value = frac_bits | 0x00800000u;
+
+  // printf("norm_frac_value: %d\n", norm_frac_value);
+
+  int sign = 1;
+  if (sign_bits) {
+    sign = -1;
+  }
+
+  if (exp_biased_value == 0xff) {
+    // value is +/-inf or NaN, return explicit value
+    return 0x80000000u;
+  }
+  if (exp_biased_value == 0x00) {
+    // denorms round to 0
+    // puts("denormal");
+    return 0;
+  }
+
+  // normal
+  // puts("normal");
+  if (exp_unbiased_value < 0) {
+    // puts("-1 < x < 1");
+    // -1 < x < 1
+    return 0;
+  }
+
+  if (exp_unbiased_value > 22) {
+    // value is too big, return explicit value
+    return 0x80000000u;
+  }
+
+  // (2^exp) * (frac + 1)
+  return sign * (norm_frac_value >> (23 - exp_unbiased_value));
+}
 /*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
@@ -453,4 +572,20 @@ int floatFloat2Int(unsigned uf) { return 2; }
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatPower2(int x) { return 2; }
+unsigned floatPower2(int x) {
+  // normal
+  const signed char bias = 127;
+  unsigned char exp_biased_value = x + bias;
+  unsigned exp_bits = exp_biased_value << 23;
+
+  // negative exp
+  if (x < 0) {
+    return 0;
+  }
+  // too big
+  if (x > 127) {
+    return 0x7f800000;
+  }
+
+  return exp_bits;
+}
