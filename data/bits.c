@@ -1,7 +1,7 @@
 /*
  * CS:APP Data Lab
  *
- * <Please put your name and userid here>
+ * c0
  *
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -141,21 +141,26 @@ NOTES:
  *   Max ops: 14
  *   Rating: 1
  */
-int bitXor(int x, int y)
-{
-  return 2;
-}
+
+// ^  0  1
+// 0  0  1
+// 1  1  0
+
+// x  y  ^ ~y x&y x&~y ~x&y ~x&~y x&~x ~0&~(~x&~y)&~(x&y)
+// 0  0  0  1  0   0     0    1    0     0
+// 0  1  1  0  0   0     1    0    0     1
+// 1  0  1  1  0   1     0    0    0     1
+// 1  1  0  0  1   0     0    0    0     0
+
+int bitXor(int x, int y) { return ~0 & ~(~x & ~y) & ~(x & y); }
+
 /*
  * tmin - return minimum two's complement integer
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 4
  *   Rating: 1
  */
-int tmin(void)
-{
-
-  return 2;
-}
+int tmin(void) { return 1 << 31; }
 // 2
 /*
  * isTmax - returns 1 if x is the maximum, two's complement number,
@@ -164,9 +169,58 @@ int tmin(void)
  *   Max ops: 10
  *   Rating: 1
  */
-int isTmax(int x)
-{
-  return 2;
+
+// 0111 1111 -> not zero
+// or else -> zero
+
+// 0111 1111 ^
+// 0000 0000 -> zero
+// 1111 0111
+// 1000 1000 -> positive
+//
+// !0x7f^x but the problem is that I can't have a literal for 32bit Tmax
+//
+// These are the constant values I can easily obtain:
+// - 0-255 -> given by the reqs
+// - -1    -> ~0
+//
+// !(0x7fffffff ^ x)
+//
+// NOTE: This works but I need to find a way to avoid needing the constant.
+
+// If we can implement this without > then we have it.
+//
+// x+1 > x
+//
+// (x+1) ^ ~(x+1)+1
+//
+// >   &   ^
+// 010 000 011
+// 001
+//
+// =
+// 010 010 000
+// 010
+//
+// <
+// 010 000 110
+// 100
+//
+// <
+// 010 010 101
+// 111
+//
+// NOTE: the > comparison gets optimized away because of UB
+
+// int y = x + 1;
+// return y ^ (~y + 1);
+//
+// NOTE: This almost works but -1 is also detected as TMax.
+
+int isTmax(int x) {
+  int y = x + 1;
+  int z = (y ^ (~y + 1));
+  return !z & !!y;
 }
 /*
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -176,9 +230,26 @@ int isTmax(int x)
  *   Max ops: 12
  *   Rating: 2
  */
-int allOddBits(int x)
-{
-  return 2;
+
+// 1010 1010
+//
+// 1110 1010
+// 1010 1010 &
+// 0000 0000 ^
+//
+// 0110 1110
+// 0010 1010 &
+// 1000 0000 ^
+
+int allOddBits(int x) {
+  int mask = 0xaa;
+  mask <<= 8;
+  mask |= 0xaa;
+  mask <<= 8;
+  mask |= 0xaa;
+  mask <<= 8;
+  mask |= 0xaa;
+  return !((mask & x) ^ mask);
 }
 /*
  * negate - return -x
@@ -187,23 +258,24 @@ int allOddBits(int x)
  *   Max ops: 5
  *   Rating: 2
  */
-int negate(int x)
-{
-  return 2;
-}
+int negate(int x) { return ~x + 1; }
 // 3
 /*
- * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0' to '9')
- *   Example: isAsciiDigit(0x35) = 1.
- *            isAsciiDigit(0x3a) = 0.
+ * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0'
+ * to '9') Example: isAsciiDigit(0x35) = 1. isAsciiDigit(0x3a) = 0.
  *            isAsciiDigit(0x05) = 0.
  *   Legal ops: ! ~ & ^ | + << >>
  *   Max ops: 15
  *   Rating: 3
  */
-int isAsciiDigit(int x)
-{
-  return 2;
+
+int isAsciiDigit(int x) {
+  int high_order_bits_set = !((x >> 4) ^ 3);
+  int is_0to7 = !(x & 0x8);
+  int is_8 = !(x ^ 0x38);
+  int is_9 = !(x ^ 0x39);
+
+  return high_order_bits_set & (is_0to7 | is_8 | is_9);
 }
 /*
  * conditional - same as x ? y : z
@@ -212,9 +284,26 @@ int isAsciiDigit(int x)
  *   Max ops: 16
  *   Rating: 3
  */
-int conditional(int x, int y, int z)
-{
-  return 2;
+
+// c     0000 0100
+// !!    0000 0001
+// -1    1111 0000
+// ~     0000 1111
+
+// cond  0000 1111
+//
+// y     0101 0101
+// z     0110 0110
+//
+// c&y   0000 0101
+// ~c&z  0110 0000
+//
+// |     0110 0101
+
+int conditional(int x, int y, int z) {
+  int neg_1 = ~0;
+  int cond_mask = ~(!!x + neg_1);
+  return (cond_mask & y) | (~cond_mask & z);
 }
 /*
  * isLessOrEqual - if x <= y  then return 1, else return 0
@@ -223,9 +312,15 @@ int conditional(int x, int y, int z)
  *   Max ops: 24
  *   Rating: 3
  */
-int isLessOrEqual(int x, int y)
-{
-  return 2;
+
+int isLessOrEqual(int x, int y) {
+  int x_sign = !!(x >> 31);
+  int y_sign = !!(y >> 31);
+  int sign_lt = (x_sign & (!y_sign));
+  int sign_gt = ((!x_sign) & y_sign);
+  int delta_lt = !!((x + (~y + 1)) >> 31);
+  int eq = !(x ^ y);
+  return (!sign_gt) & (sign_lt | delta_lt | eq);
 }
 // 4
 /*
@@ -236,9 +331,15 @@ int isLessOrEqual(int x, int y)
  *   Max ops: 12
  *   Rating: 4
  */
-int logicalNeg(int x)
-{
-  return 2;
+
+// 0110 -> 0000
+// 0000 -> 0001
+int logicalNeg(int x) {
+  int x_pos = (x >> 31) & 1;
+  int x_neg = ((~x + 1) >> 31) & 1;
+  int ored = x_pos | x_neg;
+  int neg = (~ored + 1);
+  return neg + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -252,9 +353,66 @@ int logicalNeg(int x)
  *  Max ops: 90
  *  Rating: 4
  */
-int howManyBits(int x)
-{
-  return 0;
+
+// int bit_count = 1;
+// bit_count = bit_count + !!(((x << 1) >> 1) ^ x);
+// bit_count = bit_count + !!(((x << 2) >> 2) ^ x);
+// bit_count = bit_count + !!(((x << 3) >> 3) ^ x);
+// bit_count = bit_count + !!(((x << 4) >> 4) ^ x);
+// bit_count = bit_count + !!(((x << 5) >> 5) ^ x);
+// bit_count = bit_count + !!(((x << 6) >> 6) ^ x);
+// bit_count = bit_count + !!(((x << 7) >> 7) ^ x);
+// bit_count = bit_count + !!(((x << 8) >> 8) ^ x);
+// bit_count = bit_count + !!(((x << 9) >> 9) ^ x);
+// bit_count = bit_count + !!(((x << 10) >> 10) ^ x);
+// bit_count = bit_count + !!(((x << 11) >> 11) ^ x);
+// bit_count = bit_count + !!(((x << 12) >> 12) ^ x);
+// bit_count = bit_count + !!(((x << 13) >> 13) ^ x);
+// bit_count = bit_count + !!(((x << 14) >> 14) ^ x);
+// bit_count = bit_count + !!(((x << 15) >> 15) ^ x);
+// bit_count = bit_count + !!(((x << 16) >> 16) ^ x);
+// bit_count = bit_count + !!(((x << 17) >> 17) ^ x);
+// bit_count = bit_count + !!(((x << 18) >> 18) ^ x);
+// bit_count = bit_count + !!(((x << 19) >> 19) ^ x);
+// bit_count = bit_count + !!(((x << 20) >> 20) ^ x);
+// bit_count = bit_count + !!(((x << 21) >> 21) ^ x);
+// bit_count = bit_count + !!(((x << 22) >> 22) ^ x);
+// bit_count = bit_count + !!(((x << 23) >> 23) ^ x);
+// bit_count = bit_count + !!(((x << 24) >> 24) ^ x);
+// bit_count = bit_count + !!(((x << 25) >> 25) ^ x);
+// bit_count = bit_count + !!(((x << 26) >> 26) ^ x);
+// bit_count = bit_count + !!(((x << 27) >> 27) ^ x);
+// bit_count = bit_count + !!(((x << 28) >> 28) ^ x);
+// bit_count = bit_count + !!(((x << 29) >> 29) ^ x);
+// bit_count = bit_count + !!(((x << 30) >> 30) ^ x);
+// bit_count = bit_count + !!(((x << 31) >> 31) ^ x);
+// return bit_count;
+// NOTE: this was too many ops
+
+int howManyBits(int x) {
+  int b16, b8, b4, b2, b1, b0;
+
+  int sign = x >> 31;
+  x = (sign & ~x) | (~sign & x);
+
+  b16 = !!(x >> 16) << 4;
+  x >>= b16;
+
+  b8 = !!(x >> 8) << 3;
+  x >>= b8;
+
+  b4 = !!(x >> 4) << 2;
+  x >>= b4;
+
+  b2 = !!(x >> 2) << 1;
+  x >>= b2;
+
+  b1 = !!(x >> 1);
+  x >>= b1;
+
+  b0 = x;
+
+  return b16 + b8 + b4 + b2 + b1 + b0 + 1;
 }
 // float
 /*
@@ -268,10 +426,7 @@ int howManyBits(int x)
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatScale2(unsigned uf)
-{
-  return 2;
-}
+unsigned floatScale2(unsigned uf) { return 2; }
 /*
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
  *   for floating point argument f.
@@ -284,10 +439,7 @@ unsigned floatScale2(unsigned uf)
  *   Max ops: 30
  *   Rating: 4
  */
-int floatFloat2Int(unsigned uf)
-{
-  return 2;
-}
+int floatFloat2Int(unsigned uf) { return 2; }
 /*
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
  *   (2.0 raised to the power x) for any 32-bit integer x.
@@ -301,7 +453,4 @@ int floatFloat2Int(unsigned uf)
  *   Max ops: 30
  *   Rating: 4
  */
-unsigned floatPower2(int x)
-{
-  return 2;
-}
+unsigned floatPower2(int x) { return 2; }
