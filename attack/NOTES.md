@@ -116,3 +116,11 @@ How to run:
 ```
 ./ctarget -i c-lvl2.bin
 ```
+
+# ctarget - Level 3
+
+1. I need to write the cookie string into the stack somewhere safe, I might need
+   to set %rsp to something lower to avoid having the string overwritten by
+   future calls
+2. Try to reuse the same stack space for ret addresses as before
+3. Also still need to set the %rdi registers for the address of the string
