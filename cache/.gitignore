@@ -1,0 +1,6 @@
+.csim_results
+*.o
+*.tar
+test-trans
+tracegen
+csim
