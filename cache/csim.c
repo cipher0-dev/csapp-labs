@@ -146,6 +146,21 @@ struct in_action {
   size_t size;
 };
 
+char in_action_type_char(in_action_type_t t) {
+  switch (t) {
+  case line_type_load:
+    return 'L';
+  case line_type_store:
+    return 'S';
+  case line_type_mod:
+    return 'M';
+  case line_type_instruction:
+    return 'I';
+  default:
+    return 'U';
+  }
+}
+
 int parse_line(const char *line, struct in_action *out) {
   if (!line || !out)
     return -1;
@@ -252,23 +267,23 @@ typedef enum result {
 result_t upsert_line(set_t *s, addr_t addr) {
   int valid_count = 0;
   int last_invalid = -1;
-  int lru = -1;
-  int lru_use = 0;
+  int lru_idx = -1; // index of the least reacently used line
+  int lru_use = 0;  // value of the lru line's use
 
   for (auto i = 0; i < s->lines_per_set; i++) {
-    auto line = s->lines[i];
-    if (line.valid) {
+    auto line = &s->lines[i];
+    if (line->valid) {
       valid_count++;
-      if (line.tag == addr.tag) {
-        line.use = ++s->use;
+      if (line->tag == addr.tag) {
+        line->use = ++s->use;
         return result_hit;
       }
     } else
       last_invalid = i;
 
-    if (lru < 0 || lru_use > line.use) {
-      lru = i;
-      lru_use = line.use;
+    if (lru_idx < 0 || lru_use > line->use) {
+      lru_idx = i;
+      lru_use = line->use;
     }
   }
 
@@ -284,8 +299,17 @@ result_t upsert_line(set_t *s, addr_t addr) {
     return result_miss;
   }
 
-  assert(lru >= 0);
-  s->lines[lru] = line;
+  // printf_verbose("evicting\n");
+  // printf_verbose("  lru_idx: %d\n", lru_idx);
+  // printf_verbose("  lru_use: %d\n", lru_use);
+  // printf_verbose("  lines[lru_idx].tag: %lx\n", s->lines[lru_idx].tag);
+  // for (auto i = 0; i < s->lines_per_set; i++) {
+  //   printf_verbose("  lines[%d]:\n", i);
+  //   printf_verbose("    lines[%d].use: %ld\n", i, s->lines[i].use);
+  // }
+
+  assert(lru_idx >= 0);
+  s->lines[lru_idx] = line;
   return result_evicted;
 }
 
@@ -336,6 +360,11 @@ addr_t parse_addr(cache_t *c, uint64_t addr) {
       .block = addr << (tag_bits + c->set_bits) >> (tag_bits + c->set_bits),
   };
 
+  // printf_verbose("parse_addr:\n");
+  // printf_verbose("  .tag: %ld\n", a.tag);
+  // printf_verbose("  .set: %ld\n", a.set);
+  // printf_verbose("  .block: %ld\n", a.block);
+
   return a;
 }
 
@@ -367,29 +396,43 @@ void record_result(sim_t *s, result_t r) {
   switch (r) {
   case result_hit:
     s->hits++;
+    printf_verbose("hit ");
     break;
   case result_miss:
     s->misses++;
+    printf_verbose("miss ");
     break;
   case result_evicted:
     s->misses++;
     s->evictions++;
+    printf_verbose("miss eviction ");
     break;
   default:
     exit_message("unknown result");
   }
 }
 
-void load(sim_t *s, uint64_t a) {
+void load(sim_t *s, uint64_t a, size_t size) {
+  // NOTE: size can be ignored because the lab said all memory accesses are
+  // aligned and never cross block boundaries
   auto addr = parse_addr(s->cache, a);
   auto set = select_set(s->cache, addr);
   auto result = upsert_line(set, addr);
+
+  // printf_verbose("set state:\n");
+  // printf_verbose("  use: %ld\n", set->use);
+  // for (auto i = 0; i < set->lines_per_set; i++) {
+  //   printf_verbose("  lines[%d].use: %ld\n", i, set->lines[i].use);
+  //   printf_verbose("  lines[%d].tag: %lx\n", i, set->lines[i].tag);
+  //   printf_verbose("  lines[%d].valid: %b\n", i, set->lines[i].valid);
+  // }
+
   record_result(s, result);
 };
 
-void store(sim_t *s, uint64_t addr) {
+void store(sim_t *s, uint64_t addr, size_t size) {
   // NOTE: since data is not actually stored, store can be the same as a load
-  load(s, addr);
+  load(s, addr, size);
 };
 
 void print_summary(sim_t *s) { printSummary(s->hits, s->misses, s->evictions); }
@@ -408,19 +451,19 @@ void run_sim(sim_t *s, args_t args) {
       exit_message("parse error");
     }
 
-    printf_verbose("type=%d addr=0x%llx size=%zu\n", act.type,
+    printf_verbose("%c %llx,%zu ", in_action_type_char(act.type),
                    (unsigned long long)act.addr, act.size);
 
     switch (act.type) {
     case line_type_load:
-      load(s, act.addr);
+      load(s, act.addr, act.size);
       break;
     case line_type_store:
-      store(s, act.addr);
+      store(s, act.addr, act.size);
       break;
     case line_type_mod:
-      load(s, act.addr);
-      store(s, act.addr);
+      load(s, act.addr, act.size);
+      store(s, act.addr, act.size);
       break;
     case line_type_instruction:
       // NOTE: lab instructions said to ignore this
@@ -428,6 +471,8 @@ void run_sim(sim_t *s, args_t args) {
     default:
       exit_message("invalid action");
     }
+
+    printf_verbose("\n");
   }
 
   free(line);
@@ -440,11 +485,11 @@ int main(int argc, char *argv[]) {
   auto args = parse_args(argc, argv);
 
   // print parameters
-  printf_verbose("running simulation with these parameters:\n");
-  printf_verbose("  set_bits: %ld\n", args.set_bits);
-  printf_verbose("  lines_per_set: %ld\n", args.lines_per_set);
-  printf_verbose("  block_bits: %ld\n", args.block_bits);
-  printf_verbose("  filename: %s\n\n", args.filename);
+  // printf_verbose("running simulation with these parameters:\n");
+  // printf_verbose("  set_bits: %ld\n", args.set_bits);
+  // printf_verbose("  lines_per_set: %ld\n", args.lines_per_set);
+  // printf_verbose("  block_bits: %ld\n", args.block_bits);
+  // printf_verbose("  filename: %s\n\n", args.filename);
 
   // start sim
   auto s = new_sim(args.set_bits, args.lines_per_set, args.block_bits);
