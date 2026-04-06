@@ -4,3 +4,7 @@
 test-trans
 tracegen
 csim
+.marker
+trace.f0
+trace.f1
+trace.tmp
