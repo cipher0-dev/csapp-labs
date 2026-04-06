@@ -13,8 +13,8 @@
 
 int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 
-// #define printf_debug(...)
-#define printf_debug(...) printf(__VA_ARGS__)
+#define printf_debug(...)
+// #define printf_debug(...) printf(__VA_ARGS__)
 
 void print_matrix(int M, int N, int A[M][N]) {
   printf_debug("rows: %d, cols: %d:\n", M, N);
@@ -54,17 +54,25 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
   //   }
   // }
 
-  const int batch_components = 4;
-  const int min_batch_size = 2;
+  // const int batch_components = 4;
+  // const int min_batch_size = 2;
+  //
+  // auto a_batch_rows = min(max(N / batch_components, min_batch_size), N);
+  // auto a_batch_cols = min(max(M / batch_components, min_batch_size), M);
+  auto a_batch_rows = 16;
+  auto a_batch_cols = 4;
+  if (M == 32 && N == 32) {
+    a_batch_rows = 8;
+    a_batch_cols = 8;
+  } else if (M == 64 && N == 64) {
+    a_batch_rows = 8;
+    a_batch_cols = 4;
+  }
 
-  auto a_batch_rows = min(max(N / batch_components, min_batch_size), N);
-  auto a_batch_cols = min(max(M / batch_components, min_batch_size), M);
   printf_debug("batch size: [%d][%d]\n", a_batch_rows, a_batch_cols);
 
-  auto remaining_rows = N % a_batch_rows;
-  auto remaining_cols = M % a_batch_cols;
-  printf_debug("remaining rows: %d\n", remaining_rows);
-  printf_debug("remaining cols: %d\n", remaining_cols);
+  printf_debug("remaining rows: %d\n", N % a_batch_rows);
+  printf_debug("remaining cols: %d\n", M % a_batch_cols);
 
   for (auto i = 0; i < N / a_batch_rows; i++) {
     for (auto j = 0; j < M / a_batch_cols; j++) {
@@ -101,6 +109,7 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
     }
   }
   // transpose remaining rows
+  // TODO: batch reamining rows to have more cache hits
   printf_debug("remaining rows: [%d][%d]\n", N / a_batch_rows, 0);
   auto remaining_row_pos = N / a_batch_rows * a_batch_rows;
   for (auto i = remaining_row_pos; i < N; i++) {
