@@ -20,7 +20,7 @@ void print_matrix(int M, int N, int A[M][N]) {
   printf_debug("rows: %d, cols: %d:\n", M, N);
   for (auto i = 0; i < M; i++) {
     for (auto j = 0; j < N; j++) {
-      printf_debug(" %2d", A[i][j]);
+      printf_debug(" %3d", A[i][j]);
     }
     printf_debug("\n");
   }
@@ -39,7 +39,8 @@ int max(int a, int b) { return (a < b) ? b : a; }
  */
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
-  // initialize for debugging
+  // initialize input array to sequential values and output array to all -1 for
+  // easier debugging
   // auto num = 0;
   // for (auto i = 0; i < N; i++) {
   //   for (auto j = 0; j < M; j++) {
@@ -53,11 +54,17 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
   //   }
   // }
 
-#define BATCH_COMPONENTS 4
-#define MIN_BATCH_SIZE 2
+  const int batch_components = 4;
+  const int min_batch_size = 2;
 
-  auto a_batch_rows = min(max(N / BATCH_COMPONENTS, MIN_BATCH_SIZE), N);
-  auto a_batch_cols = min(max(M / BATCH_COMPONENTS, MIN_BATCH_SIZE), M);
+  auto a_batch_rows = min(max(N / batch_components, min_batch_size), N);
+  auto a_batch_cols = min(max(M / batch_components, min_batch_size), M);
+  printf_debug("batch size: [%d][%d]\n", a_batch_rows, a_batch_cols);
+
+  auto remaining_rows = N % a_batch_rows;
+  auto remaining_cols = M % a_batch_cols;
+  printf_debug("remaining rows: %d\n", remaining_rows);
+  printf_debug("remaining cols: %d\n", remaining_cols);
 
   for (auto i = 0; i < N / a_batch_rows; i++) {
     for (auto j = 0; j < M / a_batch_cols; j++) {
@@ -76,7 +83,37 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N]) {
       }
     }
 
-    // TODO: implement remaining cols/rows
+    // transpose remaining batch for this row
+    printf_debug("remaining batch: [%d][%d]\n", i, M / a_batch_cols);
+    for (auto k = 0; k < a_batch_rows; k++) {
+      auto a_row = i * a_batch_rows + k;
+      auto b_col = a_row;
+
+      auto remaining_col_pos = M / a_batch_cols * a_batch_cols;
+      for (auto l = remaining_col_pos; l < M; l++) {
+        auto a_col = l;
+        auto b_row = a_col;
+
+        printf_debug("moving: A[%d][%d] to B[%d][%d]: %d\n", a_row, a_col,
+                     b_row, b_col, A[a_row][a_col]);
+        B[b_row][b_col] = A[a_row][a_col];
+      }
+    }
+  }
+  // transpose remaining rows
+  printf_debug("remaining rows: [%d][%d]\n", N / a_batch_rows, 0);
+  auto remaining_row_pos = N / a_batch_rows * a_batch_rows;
+  for (auto i = remaining_row_pos; i < N; i++) {
+    for (auto j = 0; j < M; j++) {
+      auto a_row = i;
+      auto b_col = a_row;
+      auto a_col = j;
+      auto b_row = a_col;
+
+      printf_debug("moving: A[%d][%d] to B[%d][%d]: %d\n", a_row, a_col, b_row,
+                   b_col, A[a_row][a_col]);
+      B[b_row][b_col] = A[a_row][a_col];
+    }
   }
 
   print_matrix(N, M, A);
